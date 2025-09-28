@@ -1,6 +1,6 @@
 import os
 import google.generativeai as genai
-from serpapi import GoogleSearch
+from serpapi.google_search_results import GoogleSearch
 from supabase import create_client, Client
 import json
 from dotenv import load_dotenv
