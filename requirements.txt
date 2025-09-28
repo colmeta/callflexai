@@ -1,0 +1,4 @@
+google-generativeai
+serpapi-python
+supabase
+python-dotenv
