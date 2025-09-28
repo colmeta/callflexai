@@ -1,4 +1,4 @@
 google-generativeai
-serpapi-python
+google-search-results
 supabase
 python-dotenv
