@@ -31,6 +31,10 @@ jobs:
       - name: Install Python dependencies
         run: pip install -r requirements.txt
 
+# NEW STEP: This will print the URL the agent is about to use.
+      - name: DEBUG - Display Target Supabase URL
+        run: echo "The agent is configured to connect to ${{ secrets.SUPABASE_URL }}"
+        
       # Step 4: Run the main agent script
       - name: Execute the AI Prospector Agent
         env:
