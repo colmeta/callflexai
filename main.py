@@ -99,7 +99,7 @@ def analyze_opportunity(business_name, reviews_text):
         return None
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash-latest')
+        model = genai.GenerativeModel('gemini-1.5-flash')
         
         prompt = f"""
         Analyze reviews for "{business_name}".
