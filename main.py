@@ -44,10 +44,10 @@ def find_business_leads(query="Plumbers in Austin TX", num_results=5):
         return []
         
     search_params = {
-        "engine": "google_maps",  # Changed from google_local to google_maps
+        "engine": "google_maps",
         "q": query,
         "api_key": SERPAPI_API_KEY,
-        "ll": "@30.267153,-97.7430608,11z",  # Austin, TX coordinates
+        "ll": "@30.267153,-97.7430608,11z",
         "type": "search"
     }
     
@@ -56,10 +56,8 @@ def find_business_leads(query="Plumbers in Austin TX", num_results=5):
         search = GoogleSearch(search_params)
         results = search.get_dict()
         
-        # Log the full response for debugging
         log(f"Prospector: Full API Response Keys: {list(results.keys())}")
         
-        # Try multiple possible result keys
         local_results = (
             results.get("local_results", []) or 
             results.get("organic_results", []) or
@@ -69,9 +67,8 @@ def find_business_leads(query="Plumbers in Austin TX", num_results=5):
         
         if not local_results:
             log(f"Prospector: WARNING - Search returned ZERO results.")
-            log(f"Prospector: API Response: {json.dumps(results, indent=2)[:500]}")  # First 500 chars
+            log(f"Prospector: API Response: {json.dumps(results, indent=2)[:500]}")
             
-            # Check for error messages
             if "error" in results:
                 log(f"Prospector: API ERROR: {results['error']}")
             if "search_information" in results:
@@ -99,7 +96,7 @@ def analyze_opportunity(business_name, reviews_text):
         return None
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-1.5-flash')
+        model = genai.GenerativeModel('gemini-pro')
         
         prompt = f"""
         Analyze reviews for "{business_name}".
@@ -121,11 +118,9 @@ def analyze_opportunity(business_name, reviews_text):
         raw_text_output = response.text
         log(f"Analyst: RAW AI Output received:\n---\n{raw_text_output}\n---")
         
-        # More aggressive cleaning
         cleaned_text = raw_text_output.strip()
-        # Remove markdown code blocks
         cleaned_text = cleaned_text.replace('```json', '').replace('```', '').strip()
-        # Remove any leading/trailing text before/after JSON object
+        
         if '{' in cleaned_text and '}' in cleaned_text:
             start = cleaned_text.find('{')
             end = cleaned_text.rfind('}') + 1
@@ -135,7 +130,6 @@ def analyze_opportunity(business_name, reviews_text):
         
         analysis = json.loads(cleaned_text)
         
-        # Validate required fields
         required_fields = ['opportunity_score', 'pain_points', 'summary']
         missing_fields = [field for field in required_fields if field not in analysis]
         
@@ -152,8 +146,18 @@ def analyze_opportunity(business_name, reviews_text):
         log(f"Analyst: Attempted to parse: {cleaned_text}")
         return None
     except Exception as e:
-        log(f"Analyst: CRITICAL GEMINI API ERROR. Check API Key, Billing, and Permissions.")
+        log(f"Analyst: CRITICAL GEMINI API ERROR.")
         log(f"Analyst: Error Details: {e}")
+        
+        # Check if it's a quota/billing error
+        error_str = str(e).lower()
+        if 'quota' in error_str or 'billing' in error_str or 'resource' in error_str:
+            log("Analyst: ⚠️ GEMINI API QUOTA EXCEEDED OR BILLING ISSUE")
+            log("Analyst: Check https://aistudio.google.com/app/apikey for credits")
+        elif '404' in error_str or 'not found' in error_str:
+            log("Analyst: ⚠️ MODEL NOT FOUND - Your API key may not have access to gemini-pro")
+            log("Analyst: Try regenerating your API key at https://aistudio.google.com/app/apikey")
+        
         return None
 
 # --- DATABASE LOGIC ---
@@ -167,7 +171,6 @@ def save_lead(business_name, rating, review_count, analysis):
         return
 
     try:
-        # Handle potential None values
         data_to_insert = {
             "business_name": business_name,
             "rating": rating if rating is not None else 0.0,
@@ -196,6 +199,31 @@ if __name__ == "__main__":
     if supabase is None:
         log("Orchestrator: Aborting run, Supabase not connected.")
     else:
+        # TEST SUPABASE CONNECTION FIRST
+        log("=== TESTING SUPABASE CONNECTION ===")
+        try:
+            test_lead = {
+                "business_name": "TEST BUSINESS - DELETE ME",
+                "rating": 4.5,
+                "review_count": 100,
+                "opportunity_score": 8,
+                "pain_points": "test, test, test",
+                "summary": "This is a test entry to verify Supabase is working"
+            }
+            result = supabase.table('leads').insert(test_lead).execute()
+            log(f"✅ TEST INSERT SUCCESS! Supabase is working correctly.")
+            log(f"Test result: {result}")
+            
+            # Clean up test data
+            supabase.table('leads').delete().eq('business_name', 'TEST BUSINESS - DELETE ME').execute()
+            log("Test data cleaned up.")
+        except Exception as e:
+            log(f"❌ TEST INSERT FAILED! Supabase has issues:")
+            log(f"Error: {e}")
+            log("Check: 1) Table exists, 2) Column names match, 3) RLS policies allow insert")
+        log("=== END SUPABASE TEST ===\n")
+        
+        # Now run the actual agent
         business_leads = find_business_leads()
 
         if business_leads:
