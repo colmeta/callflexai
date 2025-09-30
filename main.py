@@ -5,87 +5,118 @@ from supabase import create_client, Client
 import json
 from dotenv import load_dotenv
 
+# --- Enhanced Logging Version ---
+
+# This function helps us print clear, timestamped logs
+from datetime import datetime
+def log(message):
+    """Prints a message with a timestamp."""
+    print(f"[{datetime.utcnow().isoformat()}] {message}")
+
+
+# Load environment variables from a .env file (for local development)
 load_dotenv()
+log("Starting agent execution...")
 
 # --- CONFIGURATION ---
-# Secrets for our services. We will set these in Render.
+log("Loading configuration from environment variables...")
 SERPAPI_API_KEY = os.getenv('SERPAPI_API_KEY')
 GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
 
-# Create a single Supabase client instance
+# Basic configuration validation
+if not all([SERPAPI_API_KEY, GEMINI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY]):
+    log("FATAL ERROR: One or more required environment variables are missing.")
+else:
+    log("All required environment variables are loaded.")
+
+# --- Supabase Client Initialization ---
+supabase: Client = None # Initialize to None
 try:
-    supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-    print("Supabase client initialized successfully.")
+    log("Initializing Supabase client...")
+    supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
+    log("Supabase client initialized successfully.")
 except Exception as e:
-    print(f"Error initializing Supabase client: {e}")
-    supabase = None
+    log(f"CRITICAL ERROR: Failed to initialize Supabase client. Reason: {e}")
 
-# Set DRY_RUN to True to avoid API calls and database writes for testing
-DRY_RUN = False 
 
-# --- AGENT 1: PROSPECTOR (No changes needed here) ---
-def find_business_leads(query="plumbers in austin", num_results=5):
+# --- AGENT 1: PROSPECTOR ---
+def find_business_leads(query="HVAC service in Charlotte NC", num_results=3):
     """Finds business leads using Google Local Search."""
-    print(f"Prospector: Searching for '{query}'...")
-    if DRY_RUN:
-        return [{'title': 'Mock Plumbing Inc.', 'place_id': 'mock_id_123', 'reviews': 40, 'rating': 3.5}]
-    
-    # ... (This function's code is identical to the previous version) ...
-    search_params = { "engine": "google_local", "q": query, "api_key": SERPAPI_API_KEY, "num": num_results }
-    search = GoogleSearch(search_params)
-    results = search.get_dict()
-    local_results = results.get("local_results", [])
-    print(f"Prospector: Found {len(local_results)} leads.")
-    return local_results
-
-def get_business_reviews(place_id):
-    """Gets/simulates reviews for a business."""
-    # ... (This function's code is also identical) ...
-    print(f"Prospector: Fetching reviews for place_id {place_id[:15]}...")
-    if DRY_RUN:
-        return "Customers complain about slow service and no one ever calling them back. One person said 'I called three times and never got a quote!'."
-    return "Customers complain about high prices and poor communication. 'They never called me back to confirm the appointment.' 'Waited all day, no show no call'."
-
-# --- AGENT 2: ANALYST (No changes needed here) ---
-def analyze_opportunity(business_name, reviews_text):
-    """Analyzes reviews using Gemini to find callback/CRM weaknesses."""
-    # ... (This function's code is also identical) ...
-    print(f"Analyst: Analyzing opportunity for '{business_name}'...")
-    if DRY_RUN:
-        return {"opportunity_score": 8, "pain_points": ["No one calls back", "Terrible follow-up"], "summary": "High potential."}
-    
-    genai.configure(api_key=GEMINI_API_KEY)
-    model = genai.GenerativeModel('gemini-pro')
-    
-    prompt = f"""
-    You are a business analyst identifying operational weaknesses in companies based on reviews.
-    Analyze the following for "{business_name}":
-    
-    REVIEWS: "{reviews_text}"
-    
-    Provide a JSON object with: "opportunity_score" (1-10), "pain_points" (list of strings), and "summary" (one sentence).
-    Provide ONLY the JSON object.
-    """
+    log(f"Prospector Agent: Preparing to search for '{query}'...")
+    if not SERPAPI_API_KEY:
+        log("Prospector Agent: ERROR - SerpApi key is missing.")
+        return []
+        
+    search_params = {
+        "engine": "google_local",
+        "q": query,
+        "api_key": SERPAPI_API_KEY,
+        "num": num_results
+    }
     
     try:
-        response = model.generate_content(prompt)
-        json_text = response.text.strip().replace('```json', '').replace('```', '')
-        analysis = json.loads(json_text)
-        print(f"Analyst: Analysis complete. Opportunity score: {analysis.get('opportunity_score')}")
-        return analysis
+        search = GoogleSearch(search_params)
+        results = search.get_dict()
+        local_results = results.get("local_results", [])
+        
+        if not local_results:
+            log(f"Prospector Agent: WARNING - Search for '{query}' returned ZERO local results. This could be a valid result or an issue with the query/API key.")
+        else:
+            log(f"Prospector Agent: SUCCESS - Found {len(local_results)} leads.")
+        
+        return local_results
+
     except Exception as e:
-        print(f"Analyst: Error during AI analysis - {e}")
+        log(f"Prospector Agent: ERROR during API call to SerpApi. Reason: {e}")
+        return [] # Return an empty list on error
+
+def get_business_reviews(place_id):
+    """Simulates getting reviews for a business."""
+    log(f"Prospector Agent: Simulating review fetch for place_id {place_id[:15]}...")
+    return "The service was okay, but when I called back with a question, no one answered the phone. Had to call three times to get a follow-up scheduled. Very frustrating communication."
+
+# --- AGENT 2: ANALYST ---
+def analyze_opportunity(business_name, reviews_text):
+    """Analyzes reviews using Gemini."""
+    log(f"Analyst Agent: Preparing to analyze opportunity for '{business_name}'...")
+    if not GEMINI_API_KEY:
+        log("Analyst Agent: ERROR - Gemini API key is missing.")
+        return None
+    try:
+        genai.configure(api_key=GEMINI_API_KEY)
+        model = genai.GenerativeModel('gemini-pro')
+        
+        prompt = f"""
+        Analyze the following reviews for the company "{business_name}".
+        Identify pain points related to lead management, callbacks, scheduling, and communication.
+        Provide ONLY a JSON object with:
+        - "opportunity_score": An integer from 1 to 10.
+        - "pain_points": A Python list of short strings.
+        - "summary": A one-sentence explanation.
+        REVIEWS: "{reviews_text}"
+        """
+        
+        response = model.generate_content(prompt)
+        json_text = response.text.strip().replace('```json', '').replace('```', '').strip()
+        analysis = json.loads(json_text)
+        log(f"Analyst Agent: SUCCESS - Analysis complete. Score: {analysis.get('opportunity_score')}")
+        return analysis
+
+    except Exception as e:
+        log(f"Analyst Agent: ERROR during AI analysis with Gemini. Reason: {e}")
         return None
 
-
-# --- DATABASE LOGIC (UPGRADED for Supabase) ---
+# --- DATABASE LOGIC ---
 def save_lead(business_name, rating, review_count, analysis):
-    """Saves the analyzed lead to the Supabase database. Cleaner and simpler!"""
-    print(f"Database: Saving lead '{business_name}' to Supabase...")
-    if DRY_RUN or not analysis or not supabase:
-        print("Database: DRY RUN or client not initialized. Skipping save.")
+    """Saves the analyzed lead to Supabase."""
+    log(f"Database Module: Preparing to save lead '{business_name}'...")
+    if not supabase:
+        log("Database Module: ERROR - Supabase client is not initialized. Cannot save.")
+        return
+    if not analysis:
+        log("Database Module: WARNING - Analysis from Analyst Agent was empty. Skipping save.")
         return
 
     try:
@@ -94,39 +125,47 @@ def save_lead(business_name, rating, review_count, analysis):
             "rating": rating,
             "review_count": review_count,
             "opportunity_score": analysis['opportunity_score'],
-            "pain_points": ", ".join(analysis['pain_points']), # Store list as a comma-separated string
+            "pain_points": ", ".join(analysis['pain_points']),
             "summary": analysis['summary']
         }
         
-        # This is the magic! So much cleaner than before.
-        data, count = supabase.table('leads').insert(data_to_insert).execute()
+        log(f"Database Module: Attempting to insert: {data_to_insert}")
+        response = supabase.table('leads').insert(data_to_insert).execute()
         
-        print(f"Database: Lead '{business_name}' saved successfully.")
-
+        log(f"Database Module: SUCCESS - Supabase insert operation completed.")
+        
     except Exception as e:
-        print(f"Database: Error saving lead to Supabase - {e}")
+        log(f"Database Module: CRITICAL ERROR saving lead to Supabase. Reason: {e}")
 
 
-# --- THE MAIN ORCHESTRATOR (Simpler and Cleaner) ---
+# --- THE MAIN ORCHESTRATOR ---
 if __name__ == "__main__":
-    if not supabase:
-        print("AI Callback Empire Agent: Cannot start, Supabase client failed to initialize.")
-    else:
-        print("AI Callback Empire Agent: Initializing...")
-        
-        business_leads = find_business_leads(query="HVAC repair in Denver", num_results=1)
+    log("Orchestrator: Main process started.")
+    
+    business_leads = find_business_leads()
 
-        for lead in business_leads:
+    if business_leads:
+        log(f"Orchestrator: Processing {len(business_leads)} found leads...")
+        for i, lead in enumerate(business_leads):
+            log(f"--- Processing Lead #{i+1} ---")
             business_name = lead.get('title')
-            place_id = lead.get('place_id')
+            
+            if not business_name:
+                log("Orchestrator: WARNING - Lead has no title. Skipping.")
+                continue
+
+            log(f"Orchestrator: Current lead -> {business_name}")
+            place_id = lead.get('place_id', 'N/A')
             rating = lead.get('rating')
             reviews_count = lead.get('reviews')
 
             review_text_summary = get_business_reviews(place_id) 
 
-            if review_text_summary:
-                ai_analysis = analyze_opportunity(business_name, review_text_summary)
-                if ai_analysis:
-                    save_lead(business_name, rating, reviews_count, ai_analysis)
-        
-        print("AI Callback Empire Agent: Run complete.")
+            ai_analysis = analyze_opportunity(business_name, review_text_summary)
+            
+            save_lead(business_name, rating, reviews_count, ai_analysis)
+            log(f"--- Finished Processing Lead #{i+1} ---")
+    else:
+        log("Orchestrator: No business leads were found to process. This could be a normal result or an API issue.")
+
+    log("Orchestrator: Main process finished. Agent shutting down.")
