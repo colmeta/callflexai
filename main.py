@@ -44,23 +44,47 @@ def find_business_leads(query="Plumbers in Austin TX", num_results=5):
         return []
         
     search_params = {
-        "engine": "google_local", "q": query, "api_key": SERPAPI_API_KEY, "num": num_results
+        "engine": "google_maps",  # Changed from google_local to google_maps
+        "q": query,
+        "api_key": SERPAPI_API_KEY,
+        "ll": "@30.267153,-97.7430608,11z",  # Austin, TX coordinates
+        "type": "search"
     }
     
     try:
+        log(f"Prospector: Sending request to SerpAPI with params: {search_params}")
         search = GoogleSearch(search_params)
         results = search.get_dict()
-        local_results = results.get("local_results", [])
+        
+        # Log the full response for debugging
+        log(f"Prospector: Full API Response Keys: {list(results.keys())}")
+        
+        # Try multiple possible result keys
+        local_results = (
+            results.get("local_results", []) or 
+            results.get("organic_results", []) or
+            results.get("places_results", []) or
+            []
+        )
         
         if not local_results:
-            log(f"Prospector: WARNING - Search returned ZERO local results.")
-            log(f"Prospector: Full API Response: {results.get('search_information', {}).get('local_results_state', 'No state info')}")
+            log(f"Prospector: WARNING - Search returned ZERO results.")
+            log(f"Prospector: API Response: {json.dumps(results, indent=2)[:500]}")  # First 500 chars
+            
+            # Check for error messages
+            if "error" in results:
+                log(f"Prospector: API ERROR: {results['error']}")
+            if "search_information" in results:
+                log(f"Prospector: Search Info: {results['search_information']}")
         else:
             log(f"Prospector: SUCCESS - Found {len(local_results)} leads.")
+        
         return local_results
 
     except Exception as e:
         log(f"Prospector: ERROR during SerpApi call: {e}")
+        import traceback
+        log(f"Prospector: Full traceback: {traceback.format_exc()}")
         return []
 
 def get_business_reviews(place_id):
