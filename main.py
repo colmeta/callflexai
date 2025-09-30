@@ -75,34 +75,61 @@ def analyze_opportunity(business_name, reviews_text):
         return None
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        # Using the latest recommended model for this task
         model = genai.GenerativeModel('gemini-1.5-flash-latest')
         
         prompt = f"""
         Analyze reviews for "{business_name}".
         Pain points should be related to callbacks, scheduling, and communication.
-        Provide ONLY a JSON object with "opportunity_score" (1-10), "pain_points" (list of strings), and "summary" (one sentence).
+        
+        You MUST respond with ONLY a valid JSON object. No markdown, no explanation, no code blocks.
+        The JSON must have exactly these fields:
+        - "opportunity_score": a number from 1 to 10
+        - "pain_points": an array of strings
+        - "summary": a single sentence string
+        
         REVIEWS: "{reviews_text}"
+        
+        Response format (respond with ONLY this, nothing else):
+        {{"opportunity_score": 8, "pain_points": ["example1", "example2"], "summary": "Brief summary here"}}
         """
         
         response = model.generate_content(prompt)
-        
-        # --- THIS IS THE NEW CRITICAL LOGGING STEP ---
         raw_text_output = response.text
         log(f"Analyst: RAW AI Output received:\n---\n{raw_text_output}\n---")
         
-        # Clean the raw text before trying to parse it
-        cleaned_text = raw_text_output.strip().replace('```json', '').replace('```', '').strip()
+        # More aggressive cleaning
+        cleaned_text = raw_text_output.strip()
+        # Remove markdown code blocks
+        cleaned_text = cleaned_text.replace('```json', '').replace('```', '').strip()
+        # Remove any leading/trailing text before/after JSON object
+        if '{' in cleaned_text and '}' in cleaned_text:
+            start = cleaned_text.find('{')
+            end = cleaned_text.rfind('}') + 1
+            cleaned_text = cleaned_text[start:end]
+        
+        log(f"Analyst: Cleaned text:\n---\n{cleaned_text}\n---")
         
         analysis = json.loads(cleaned_text)
+        
+        # Validate required fields
+        required_fields = ['opportunity_score', 'pain_points', 'summary']
+        missing_fields = [field for field in required_fields if field not in analysis]
+        
+        if missing_fields:
+            log(f"Analyst: ERROR - Missing required fields: {missing_fields}")
+            return None
+        
         log(f"Analyst: SUCCESS - JSON Parsed. Score: {analysis.get('opportunity_score')}")
         return analysis
 
     except json.JSONDecodeError as e:
-        log(f"Analyst: CRITICAL JSON PARSING ERROR. The AI output was not valid JSON. Reason: {e}")
+        log(f"Analyst: CRITICAL JSON PARSING ERROR. The AI output was not valid JSON.")
+        log(f"Analyst: JSON Error Details: {e}")
+        log(f"Analyst: Attempted to parse: {cleaned_text}")
         return None
     except Exception as e:
-        log(f"Analyst: CRITICAL GEMINI API ERROR. Check API Key, Billing, and Permissions. Reason: {e}")
+        log(f"Analyst: CRITICAL GEMINI API ERROR. Check API Key, Billing, and Permissions.")
+        log(f"Analyst: Error Details: {e}")
         return None
 
 # --- DATABASE LOGIC ---
@@ -116,18 +143,26 @@ def save_lead(business_name, rating, review_count, analysis):
         return
 
     try:
+        # Handle potential None values
         data_to_insert = {
-            "business_name": business_name, "rating": rating, "review_count": review_count,
-            "opportunity_score": analysis['opportunity_score'],
-            "pain_points": ", ".join(analysis['pain_points']), "summary": analysis['summary']
+            "business_name": business_name,
+            "rating": rating if rating is not None else 0.0,
+            "review_count": review_count if review_count is not None else 0,
+            "opportunity_score": analysis.get('opportunity_score', 0),
+            "pain_points": ", ".join(analysis.get('pain_points', [])),
+            "summary": analysis.get('summary', '')
         }
         
         log(f"Database: Attempting to insert: {data_to_insert}")
-        supabase.table('leads').insert(data_to_insert).execute()
+        result = supabase.table('leads').insert(data_to_insert).execute()
         log(f"Database: SUCCESS - Lead '{business_name}' saved.")
+        log(f"Database: Insert result: {result}")
         
     except Exception as e:
-        log(f"Database: CRITICAL ERROR saving to Supabase. Reason: {e}")
+        log(f"Database: CRITICAL ERROR saving to Supabase.")
+        log(f"Database: Error type: {type(e).__name__}")
+        log(f"Database: Error details: {str(e)}")
+        log(f"Database: Data attempted: {data_to_insert}")
 
 
 # --- MAIN ORCHESTRATOR ---
