@@ -3,7 +3,7 @@
 
 from datetime import datetime
 from database import get_supabase_client
-from communicator import generate_outreach_email
+from communicator import generate_outreach_email_from_template
 
 def log(message):
     print(f"[{datetime.utcnow().isoformat()}] {message}")
@@ -35,7 +35,7 @@ def run_communicator_workflow():
             log(f"--- Processing lead: {business_name} (ID: {lead_id}) ---")
 
             # 2. Generate a personalized email for this lead.
-            subject, body = generate_outreach_email(business_name, pain_points)
+            subject, body = generate_outreach_email_from_template(business_name, pain_points)
 
             if subject and body:
                 # 3. Save the generated email to our 'outreach_queue' table.
