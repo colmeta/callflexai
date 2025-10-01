@@ -1,0 +1,33 @@
+# --- daily-communicator.yml ---
+name: Daily Communicator Agent
+
+on:
+  workflow_dispatch:
+
+  # Runs at 6:30 AM UTC every day (an hour after the prospector)
+  schedule:
+    - cron: '30 6 * * *'
+
+jobs:
+  run-communicator:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Check out repository code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Execute the Communicator Agent
+        env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          SENDGRID_API_KEY: ${{ secrets.SENDGRID_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python main_communicator.py
