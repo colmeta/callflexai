@@ -6,7 +6,7 @@ import json
 from dotenv import load_dotenv
 from datetime import datetime
 
-# --- FINAL DIAGNOSTIC LOGGING ---
+# --- KEYWORD-BASED ANALYSIS VERSION ---
 
 def log(message):
     """Prints a message with a timestamp."""
@@ -18,14 +18,14 @@ log("Starting agent execution...")
 # --- CONFIGURATION ---
 log("Loading configuration...")
 SERPAPI_API_KEY = os.getenv('SERPAPI_API_KEY')
-GEMINI_API_KEY = os.getenv('GEMINI_API_KEY')
 SUPABASE_URL = os.getenv('SUPABASE_URL')
 SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
 
-if not all([SERPAPI_API_KEY, GEMINI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY]):
+# NOTE: GEMINI_API_KEY is no longer checked as it's not used in this version.
+if not all([SERPAPI_API_KEY, SUPABASE_URL, SUPABASE_SERVICE_KEY]):
     log("FATAL ERROR: Environment variables are missing.")
 else:
-    log("All environment variables loaded.")
+    log("All required environment variables loaded.")
 
 # --- Supabase Client ---
 supabase: Client = None
@@ -37,154 +37,78 @@ except Exception as e:
     log(f"CRITICAL ERROR initializing Supabase: {e}")
 
 # --- AGENT 1: PROSPECTOR ---
-def find_business_leads(query="Plumbers in Austin TX", num_results=5):
+def find_business_leads(query="Plumbers in Austin TX", num_results=20):
     log(f"Prospector: Searching for '{query}'...")
     if not SERPAPI_API_KEY:
         log("Prospector: ERROR - SerpApi key is missing.")
         return []
         
     search_params = {
-        "engine": "google_maps",
-        "q": query,
-        "api_key": SERPAPI_API_KEY,
-        "ll": "@30.267153,-97.7430608,11z",
-        "type": "search"
+        "engine": "google_local", "q": query, "api_key": SERPAPI_API_KEY, "num": num_results
     }
     
     try:
-        log(f"Prospector: Sending request to SerpAPI with params: {search_params}")
         search = GoogleSearch(search_params)
         results = search.get_dict()
-        
-        log(f"Prospector: Full API Response Keys: {list(results.keys())}")
-        
-        local_results = (
-            results.get("local_results", []) or 
-            results.get("organic_results", []) or
-            results.get("places_results", []) or
-            []
-        )
+        local_results = results.get("local_results", [])
         
         if not local_results:
-            log(f"Prospector: WARNING - Search returned ZERO results.")
-            log(f"Prospector: API Response: {json.dumps(results, indent=2)[:500]}")
-            
-            if "error" in results:
-                log(f"Prospector: API ERROR: {results['error']}")
-            if "search_information" in results:
-                log(f"Prospector: Search Info: {results['search_information']}")
+            log(f"Prospector: WARNING - Search returned ZERO local results.")
         else:
             log(f"Prospector: SUCCESS - Found {len(local_results)} leads.")
-        
         return local_results
 
     except Exception as e:
         log(f"Prospector: ERROR during SerpApi call: {e}")
-        import traceback
-        log(f"Prospector: Full traceback: {traceback.format_exc()}")
         return []
 
 def get_business_reviews(place_id):
     log(f"Prospector: Simulating review fetch for place_id {place_id[:15]}...")
-    return "Communication was poor. I had to call them three times to get a quote, and no one seemed to know what was going on. Frustrating experience trying to give them my business."
+    # This simulated review contains keywords our new Analyst will look for.
+    return "Communication was poor. I had to call them three times to get a quote, and no one seemed to know what was going on. They never called me back after the first message. Frustrating experience trying to get an appointment."
 
-# --- AGENT 2: ANALYST ---
+# --- AGENT 2: ANALYST (KEYWORD-BASED - NO AI REQUIRED) ---
 def analyze_opportunity(business_name, reviews_text):
-    log(f"Analyst: Preparing to analyze '{business_name}'...")
-    if not GEMINI_API_KEY:
-        log("Analyst: ERROR - Gemini API key is missing.")
-        return None
-    try:
-        genai.configure(api_key=GEMINI_API_KEY)
-        # Try multiple model names in order of preference
-        model_names = [
-            'models/gemini-1.5-flash',
-            'models/gemini-1.5-pro', 
-            'models/gemini-pro',
-            'gemini-1.5-flash',
-            'gemini-pro'
-        ]
-        
-        model = None
-        last_error = None
-        
-        for model_name in model_names:
-            try:
-                log(f"Analyst: Attempting to use model: {model_name}")
-                model = genai.GenerativeModel(model_name)
-                # Test if the model works by doing a simple generation
-                test_response = model.generate_content("Hello")
-                log(f"Analyst: SUCCESS - Model {model_name} is working!")
-                break
-            except Exception as e:
-                last_error = e
-                log(f"Analyst: Model {model_name} failed: {str(e)[:100]}")
-                continue
-        
-        if model is None:
-            raise Exception(f"All models failed. Last error: {last_error}")
-        
-        prompt = f"""
-        Analyze reviews for "{business_name}".
-        Pain points should be related to callbacks, scheduling, and communication.
-        
-        You MUST respond with ONLY a valid JSON object. No markdown, no explanation, no code blocks.
-        The JSON must have exactly these fields:
-        - "opportunity_score": a number from 1 to 10
-        - "pain_points": an array of strings
-        - "summary": a single sentence string
-        
-        REVIEWS: "{reviews_text}"
-        
-        Response format (respond with ONLY this, nothing else):
-        {{"opportunity_score": 8, "pain_points": ["example1", "example2"], "summary": "Brief summary here"}}
-        """
-        
-        response = model.generate_content(prompt)
-        raw_text_output = response.text
-        log(f"Analyst: RAW AI Output received:\n---\n{raw_text_output}\n---")
-        
-        cleaned_text = raw_text_output.strip()
-        cleaned_text = cleaned_text.replace('```json', '').replace('```', '').strip()
-        
-        if '{' in cleaned_text and '}' in cleaned_text:
-            start = cleaned_text.find('{')
-            end = cleaned_text.rfind('}') + 1
-            cleaned_text = cleaned_text[start:end]
-        
-        log(f"Analyst: Cleaned text:\n---\n{cleaned_text}\n---")
-        
-        analysis = json.loads(cleaned_text)
-        
-        required_fields = ['opportunity_score', 'pain_points', 'summary']
-        missing_fields = [field for field in required_fields if field not in analysis]
-        
-        if missing_fields:
-            log(f"Analyst: ERROR - Missing required fields: {missing_fields}")
-            return None
-        
-        log(f"Analyst: SUCCESS - JSON Parsed. Score: {analysis.get('opportunity_score')}")
-        return analysis
+    log(f"Analyst: Analyzing '{business_name}' with keyword matching (NO AI)...")
+    
+    # Define keywords and their point values. Higher points for stronger "pain" signals.
+    keywords = {
+        'call back': 3, 'callback': 3, 'never called': 4, 'no call': 2,
+        'communication': 2, 'no response': 4, 'unreachable': 3, 'unresponsive': 3,
+        'scheduling': 2, 'appointment': 1, 'no show': 4, 'follow-up': 2,
+        'phone': 1, 'answer': 1, 'reach': 1, 'contact': 1, 'quote': 2
+    }
+    
+    score = 0
+    pain_points_found = []
+    reviews_lower = reviews_text.lower()
+    
+    for keyword, points in keywords.items():
+        if keyword in reviews_lower:
+            score += points
+            # Use the keyword itself as the pain point
+            if keyword not in pain_points_found:
+                 pain_points_found.append(keyword)
+    
+    # Cap the score at 10 to keep it consistent.
+    final_score = min(score, 10)
+    
+    # If no keywords are found, we can assign a neutral score or skip, but a neutral score is better for testing.
+    if final_score == 0:
+        final_score = 3 # Assign a low score if no keywords are found
+        summary = "No specific communication pain points found via keywords."
+    else:
+        summary = f"Found {len(pain_points_found)} communication-related issues via keywords."
+    
+    analysis_result = {
+        "opportunity_score": final_score,
+        "pain_points": pain_points_found[:3], # Return up to 3 found pain points
+        "summary": summary
+    }
+    
+    log(f"Analyst: SUCCESS - Keyword analysis complete. Score: {analysis_result['opportunity_score']}")
+    return analysis_result
 
-    except json.JSONDecodeError as e:
-        log(f"Analyst: CRITICAL JSON PARSING ERROR. The AI output was not valid JSON.")
-        log(f"Analyst: JSON Error Details: {e}")
-        log(f"Analyst: Attempted to parse: {cleaned_text}")
-        return None
-    except Exception as e:
-        log(f"Analyst: CRITICAL GEMINI API ERROR.")
-        log(f"Analyst: Error Details: {e}")
-        
-        # Check if it's a quota/billing error
-        error_str = str(e).lower()
-        if 'quota' in error_str or 'billing' in error_str or 'resource' in error_str:
-            log("Analyst: ⚠️ GEMINI API QUOTA EXCEEDED OR BILLING ISSUE")
-            log("Analyst: Check https://aistudio.google.com/app/apikey for credits")
-        elif '404' in error_str or 'not found' in error_str:
-            log("Analyst: ⚠️ MODEL NOT FOUND - Your API key may not have access to gemini-pro")
-            log("Analyst: Try regenerating your API key at https://aistudio.google.com/app/apikey")
-        
-        return None
 
 # --- DATABASE LOGIC ---
 def save_lead(business_name, rating, review_count, analysis):
@@ -209,14 +133,9 @@ def save_lead(business_name, rating, review_count, analysis):
         log(f"Database: Attempting to insert: {data_to_insert}")
         result = supabase.table('leads').insert(data_to_insert).execute()
         log(f"Database: SUCCESS - Lead '{business_name}' saved.")
-        log(f"Database: Insert result: {result}")
         
     except Exception as e:
-        log(f"Database: CRITICAL ERROR saving to Supabase.")
-        log(f"Database: Error type: {type(e).__name__}")
-        log(f"Database: Error details: {str(e)}")
-        log(f"Database: Data attempted: {data_to_insert}")
-
+        log(f"Database: CRITICAL ERROR saving to Supabase. Reason: {e}")
 
 # --- MAIN ORCHESTRATOR ---
 if __name__ == "__main__":
@@ -225,31 +144,6 @@ if __name__ == "__main__":
     if supabase is None:
         log("Orchestrator: Aborting run, Supabase not connected.")
     else:
-        # TEST SUPABASE CONNECTION FIRST
-        log("=== TESTING SUPABASE CONNECTION ===")
-        try:
-            test_lead = {
-                "business_name": "TEST BUSINESS - DELETE ME",
-                "rating": 4.5,
-                "review_count": 100,
-                "opportunity_score": 8,
-                "pain_points": "test, test, test",
-                "summary": "This is a test entry to verify Supabase is working"
-            }
-            result = supabase.table('leads').insert(test_lead).execute()
-            log(f"✅ TEST INSERT SUCCESS! Supabase is working correctly.")
-            log(f"Test result: {result}")
-            
-            # Clean up test data
-            supabase.table('leads').delete().eq('business_name', 'TEST BUSINESS - DELETE ME').execute()
-            log("Test data cleaned up.")
-        except Exception as e:
-            log(f"❌ TEST INSERT FAILED! Supabase has issues:")
-            log(f"Error: {e}")
-            log("Check: 1) Table exists, 2) Column names match, 3) RLS policies allow insert")
-        log("=== END SUPABASE TEST ===\n")
-        
-        # Now run the actual agent
         business_leads = find_business_leads()
 
         if business_leads:
