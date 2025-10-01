@@ -27,9 +27,14 @@ def save_lead(supabase_client, business_name, rating, review_count, analysis):
             "rating": rating if rating is not None else 0.0,
             "review_count": review_count if review_count is not None else 0,
             "opportunity_score": analysis.get('opportunity_score', 0),
-            "pain_points": ", ".join(analysis.get('pain_points', [])),
-            "summary": analysis.get('summary', '')
-        }
+                    "pain_points": ", ".join(analysis.get('pain_points', [])),
+        "summary": analysis.get('summary', ''),
+        "status": "new"  # ✅ The line that fixes everything.
+    }
+```4.  Optionally, for better logging, find this line:
+`log(f"Database Module: SUCCESS - Lead '{business_name}' saved.")`
+And change it to what you suggested:
+`log(f"Database Module: SUCCESS - Lead '{business_name}' saved with status='new'.")`
         
         log(f"Database Module: Attempting to insert: {data_to_insert}")
         result = supabase_client.table('leads').insert(data_to_insert).execute()
