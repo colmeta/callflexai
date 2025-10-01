@@ -29,7 +29,6 @@ def run_communicator_workflow():
         log(f"Communicator: Found {len(new_leads)} new leads to process.")
 
         for lead in new_leads:
-            lead_id = lead['id']
             business_name = lead['business_name']
             pain_points = lead['pain_points']
             log(f"--- Processing lead: {business_name} (ID: {lead_id}) ---")
