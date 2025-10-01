@@ -96,7 +96,33 @@ def analyze_opportunity(business_name, reviews_text):
         return None
     try:
         genai.configure(api_key=GEMINI_API_KEY)
-        model = genai.GenerativeModel('gemini-pro')
+        # Try multiple model names in order of preference
+        model_names = [
+            'models/gemini-1.5-flash',
+            'models/gemini-1.5-pro', 
+            'models/gemini-pro',
+            'gemini-1.5-flash',
+            'gemini-pro'
+        ]
+        
+        model = None
+        last_error = None
+        
+        for model_name in model_names:
+            try:
+                log(f"Analyst: Attempting to use model: {model_name}")
+                model = genai.GenerativeModel(model_name)
+                # Test if the model works by doing a simple generation
+                test_response = model.generate_content("Hello")
+                log(f"Analyst: SUCCESS - Model {model_name} is working!")
+                break
+            except Exception as e:
+                last_error = e
+                log(f"Analyst: Model {model_name} failed: {str(e)[:100]}")
+                continue
+        
+        if model is None:
+            raise Exception(f"All models failed. Last error: {last_error}")
         
         prompt = f"""
         Analyze reviews for "{business_name}".
