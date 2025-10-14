@@ -1,4 +1,4 @@
-# --- main.py (Multi-Tenant Orchestrator v2.0) ---
+# --- main.py (FLEXIBLE MULTI-TENANT ORCHESTRATOR) ---
 
 from datetime import datetime
 from database import get_supabase_client
@@ -9,8 +9,8 @@ def log(message):
     print(f"[{datetime.utcnow().isoformat()}] {message}")
 
 def save_lead(supabase_client, client_id, lead_data, analysis):
-    """Saves a single lead to the database, now linked to a client."""
-    log(f"Database: Preparing to save '{lead_data.get('title')}' for client {client_id}...")
+    """Saves a single lead to the database, linked to a specific client."""
+    log(f"Database: Saving '{lead_data.get('title')}' for client {client_id}...")
     try:
         data_to_insert = {
             "client_id": client_id,
@@ -23,75 +23,116 @@ def save_lead(supabase_client, client_id, lead_data, analysis):
             "status": "new"
         }
         supabase_client.table('leads').insert(data_to_insert).execute()
-        log(f"Database: SUCCESS - Lead '{lead_data.get('title')}' saved.")
+        log(f"Database: SUCCESS - Lead saved.")
     except Exception as e:
-        log(f"Database: CRITICAL ERROR saving lead. Reason: {e}")
+        log(f"Database: ERROR saving lead: {e}")
+
+def check_if_lead_exists(supabase_client, client_id, business_name):
+    """
+    Checks if we've already prospected this business for this client.
+    This prevents duplicate outreach (idempotency).
+    """
+    try:
+        response = supabase_client.table('leads').select('id').eq('client_id', client_id).eq('business_name', business_name).execute()
+        return len(response.data) > 0
+    except Exception as e:
+        log(f"Database: ERROR checking for duplicates: {e}")
+        return False
 
 def run_prospecting_for_client(supabase_client, client):
-    """Runs the entire prospecting workflow for a single client."""
+    """Runs the prospecting workflow for ONE client."""
     client_id = client.get('id')
+    client_name = client.get('business_name')
     niche = client.get('prospecting_niche')
     location = client.get('prospecting_location')
     
+    # Validate that client has required settings
     if not all([client_id, niche, location]):
-        log(f"Orchestrator: WARNING - Skipping client {client.get('business_name')} due to missing config (niche or location).")
+        log(f"Orchestrator: SKIPPING {client_name} - Missing niche or location in database.")
         return
-
-    log(f"--- Starting Prospecting Job for Client: {client.get('business_name')} ---")
-    query = f"{niche} in {location}"
     
-    business_leads = find_business_leads(query=query)
-
-    if business_leads:
-        log(f"Orchestrator: Found {len(business_leads)} potential leads for {client.get('business_name')}.")
-        for lead_data in business_leads:
-            business_name = lead_data.get('title')
-            if not business_name:
-                log("Orchestrator: WARNING - Skipping a lead with no title.")
-                continue
-
-            # In the future, this is where Idempotency check will go
-            # pseudo-code: if database.lead_exists(client_id, lead_data['place_id']): continue
-
-            review_text = get_business_reviews(lead_data.get('place_id'))
-            analysis = analyze_opportunity_with_keywords(business_name, review_text)
-            
+    log(f"--- STARTING JOB FOR: {client_name} ---")
+    log(f"    Target Niche: {niche}")
+    log(f"    Target Location: {location}")
+    
+    # NEW: Dynamic search based on client's settings
+    business_leads = find_business_leads(niche=niche, location=location, num_results=20)
+    
+    if not business_leads:
+        log(f"Orchestrator: No leads found for {client_name}.")
+        return
+    
+    log(f"Orchestrator: Found {len(business_leads)} potential leads.")
+    
+    new_leads_count = 0
+    duplicate_leads_count = 0
+    
+    for lead_data in business_leads:
+        business_name = lead_data.get('title')
+        if not business_name:
+            continue
+        
+        # Check for duplicates (don't contact the same business twice)
+        if check_if_lead_exists(supabase_client, client_id, business_name):
+            log(f"Orchestrator: DUPLICATE - '{business_name}' already in database. Skipping.")
+            duplicate_leads_count += 1
+            continue
+        
+        # Get reviews and analyze
+        review_text = get_business_reviews(lead_data.get('place_id'))
+        analysis = analyze_opportunity_with_keywords(business_name, review_text)
+        
+        # Only save leads with a score above threshold (don't waste time on low-quality)
+        if analysis.get('opportunity_score', 0) >= 3:
             save_lead(supabase_client, client_id, lead_data, analysis)
-        log(f"--- Finished Job for Client: {client.get('business_name')} ---")
-    else:
-        log(f"Orchestrator: No new leads found for {client.get('business_name')}.")
+            new_leads_count += 1
+        else:
+            log(f"Orchestrator: FILTERED - '{business_name}' scored too low ({analysis.get('opportunity_score')}). Skipping.")
+    
+    log(f"--- JOB COMPLETE FOR: {client_name} ---")
+    log(f"    New Leads: {new_leads_count}")
+    log(f"    Duplicates Filtered: {duplicate_leads_count}")
 
-# --- THE NEW MAIN WORKFLOW ---
 def run_master_orchestrator():
-    log("Master Orchestrator: Waking up...")
+    """The master workflow that processes ALL active clients."""
+    log("="*60)
+    log("MASTER ORCHESTRATOR: Waking up...")
+    log("="*60)
     
     supabase_client = get_supabase_client()
     if not supabase_client:
-        log("Master Orchestrator: ABORTING - Supabase connection failed.")
+        log("FATAL ERROR: Cannot connect to Supabase. Aborting.")
         return
-
-    # Step A: Fetch all active clients who get this service
+    
     try:
-        log("Master Orchestrator: Fetching all active clients on the 'pro' plan...")
-        # Note: In the future, we'll filter by `monthly_plan`. For now, we get all active clients.
+        log("Fetching all active clients from database...")
+        
+        # Get all clients who are active or trialing
         response = supabase_client.table('clients').select('*').in_('subscription_status', ['active', 'trialing']).execute()
         
         active_clients = response.data
-        if not active_clients:
-            log("Master Orchestrator: No active clients found. Going back to sleep.")
-            return
-
-        log(f"Master Orchestrator: Found {len(active_clients)} clients to process.")
         
-        # Step B: Loop through each client and run their job
-        for client in active_clients:
+        if not active_clients:
+            log("No active clients found. Nothing to do today.")
+            return
+        
+        log(f"Found {len(active_clients)} active client(s) to process.")
+        log("")
+        
+        # Process each client one by one
+        for idx, client in enumerate(active_clients, 1):
+            log(f"Processing client {idx}/{len(active_clients)}...")
             run_prospecting_for_client(supabase_client, client)
-
+            log("")  # Blank line for readability
+        
+        log("="*60)
+        log("MASTER ORCHESTRATOR: All jobs complete. Shutting down.")
+        log("="*60)
+    
     except Exception as e:
-        log(f"Master Orchestrator: CRITICAL ERROR during client fetch or loop: {e}")
-
-    log("Master Orchestrator: All client jobs complete. Shutting down.")
-
+        log(f"CRITICAL ERROR in master orchestrator: {e}")
+        import traceback
+        log(f"Full traceback:\n{traceback.format_exc()}")
 
 if __name__ == "__main__":
     run_master_orchestrator()
