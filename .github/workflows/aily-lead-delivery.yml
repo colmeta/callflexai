@@ -1,0 +1,33 @@
+name: Daily Lead Delivery Agent
+
+on:
+  workflow_dispatch:  # Manual trigger for testing
+  
+  # Runs at 8:00 AM UTC every day (adjust based on your clients' timezone)
+  # For US Eastern Time clients, 8 AM UTC = 3 AM EST (too early)
+  # For US clients, use 1:00 PM UTC = 8 AM EST
+  schedule:
+    - cron: '0 13 * * *'  # 8 AM Eastern Time
+
+jobs:
+  deliver-leads:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v4
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Execute Lead Delivery Agent
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python main_lead_delivery.py
