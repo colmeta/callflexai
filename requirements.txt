@@ -1,4 +1,21 @@
+# --- requirements.txt (FREE STACK VERSION) ---
+
 google-search-results
-supabase
-python-dotenv
-sendgrid
+
+# Database
+supabase==2.3.0
+
+# HTTP requests (for Brevo API and ScraperAPI)
+requests==2.31.0
+
+# Environment variables
+python-dotenv==1.0.0
+
+# Web scraping (if you need to parse HTML from ScraperAPI)
+beautifulsoup4==4.12.2
+
+# Webhook server (only needed for webhook_server.py)
+flask==3.0.0
+
+# Optional: Better logging
+colorama==0.4.6
