@@ -1,7 +1,5 @@
 # --- requirements.txt (FREE STACK VERSION) ---
 
-google-search-results
-
 # Database
 supabase==2.3.0
 
