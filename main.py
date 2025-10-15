@@ -45,7 +45,6 @@ def run_prospecting_for_client(supabase_client, client):
     client_name = client.get('business_name')
     niche = client.get('prospecting_niche')
     location = client.get('prospecting_location')
-    max_leads_per_day = client.get('max_leads_per_day', 20)  # NEW: Configurable limit
     
     # Validate that client has required settings
     if not all([client_id, niche, location]):
