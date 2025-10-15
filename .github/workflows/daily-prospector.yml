@@ -38,7 +38,7 @@ jobs:
       # Step 4: Run the main agent script
       - name: Execute the AI Prospector Agent
         env:
-          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+          SCRAPER_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
