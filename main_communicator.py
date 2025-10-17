@@ -1,12 +1,15 @@
-# --- main_communicator.py (FINAL, ROBUST VERSION) ---
+# --- main_communicator.py (FIXED IMPORTS) ---
 
 from datetime import datetime
 import os
+import sys
 from dotenv import load_dotenv
 
-# We will import the tools directly instead of just the client
+# FIXED: Add modules path to sys.path
+sys.path.append('./modules/service_business')
+
 from supabase import create_client, Client
-from communicator import generate_outreach_email_from_template
+from modules.service_business.communicator import generate_outreach_email_from_template
 
 def log(message):
     print(f"[{datetime.utcnow().isoformat()}] {message}")
@@ -43,10 +46,8 @@ def run_communicator_workflow():
     try:
         log("Communicator: Preparing to query for new leads with status 'new'...")
         
-        # This is the query that will find the work.
         response = supabase.table('leads').select('id, business_name, pain_points').eq('status', 'new').limit(5).execute()
         
-        # --- NEW DEBUGGING STEP ---
         log(f"Communicator: Supabase query executed. Full response data: {response.data}")
 
         if response.data and isinstance(response.data, list):
