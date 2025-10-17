@@ -126,4 +126,45 @@ def run_pi_orchestrator():
             log(f"💡 ACTION: Find PI lawyers in {city} and send them the one-pager!")
     
     log("\n" + "="*60)
-    log
+    log("PI ORCHESTRATOR: Summary complete")
+    log("="*60)
+    
+    # Export to CSV for easy review
+    export_leads_to_csv(injured_by_city)
+
+def export_leads_to_csv(injured_by_city):
+    """Exports all leads to a single CSV for your review."""
+    import csv
+    
+    filename = f"pi_leads_summary_{datetime.now().strftime('%Y%m%d')}.csv"
+    
+    all_leads = []
+    for city, people in injured_by_city.items():
+        all_leads.extend(people)
+    
+    if not all_leads:
+        return
+    
+    log(f"\nExporting {len(all_leads)} leads to {filename}...")
+    
+    with open(filename, 'w', newline='', encoding='utf-8') as f:
+        fieldnames = ['city', 'prospect_name', 'injury_type', 'quality_score', 'description', 'source', 'source_url', 'posted_date']
+        writer = csv.DictWriter(f, fieldnames=fieldnames)
+        writer.writeheader()
+        
+        for lead in all_leads:
+            writer.writerow({
+                'city': lead.get('city'),
+                'prospect_name': lead.get('prospect_name'),
+                'injury_type': lead.get('injury_type'),
+                'quality_score': lead.get('quality_score'),
+                'description': lead.get('description'),
+                'source': lead.get('source'),
+                'source_url': lead.get('source_url'),
+                'posted_date': lead.get('posted_date')
+            })
+    
+    log(f"✅ Exported to {filename}")
+
+if __name__ == "__main__":
+    run_pi_orchestrator()
