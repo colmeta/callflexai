@@ -4,6 +4,8 @@ from datetime import datetime
 from database import get_supabase_client
 from prospector import find_business_leads, get_business_reviews
 from analyst import analyze_opportunity_with_keywords
+import sys
+sys.path.append('./modules/service_business')
 
 def log(message):
     print(f"[{datetime.utcnow().isoformat()}] {message}")
