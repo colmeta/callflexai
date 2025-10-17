@@ -1,11 +1,14 @@
-# --- main.py (FLEXIBLE MULTI-TENANT ORCHESTRATOR) ---
+# --- main.py (FIXED IMPORTS) ---
 
 from datetime import datetime
-from database import get_supabase_client
-from prospector import find_business_leads, get_business_reviews
-from analyst import analyze_opportunity_with_keywords
 import sys
+
+# FIXED: Add modules path BEFORE importing
 sys.path.append('./modules/service_business')
+
+from database import get_supabase_client
+from modules.service_business.prospector import find_business_leads, get_business_reviews
+from modules.service_business.analyst import analyze_opportunity_with_keywords
 
 def log(message):
     print(f"[{datetime.utcnow().isoformat()}] {message}")
@@ -57,7 +60,7 @@ def run_prospecting_for_client(supabase_client, client):
     log(f"    Target Niche: {niche}")
     log(f"    Target Location: {location}")
     
-    # NEW: Dynamic search based on client's settings
+    # Dynamic search based on client's settings
     business_leads = find_business_leads(niche=niche, location=location, num_results=20)
     
     if not business_leads:
@@ -74,7 +77,7 @@ def run_prospecting_for_client(supabase_client, client):
         if not business_name:
             continue
         
-        # Check for duplicates (don't contact the same business twice)
+        # Check for duplicates
         if check_if_lead_exists(supabase_client, client_id, business_name):
             log(f"Orchestrator: DUPLICATE - '{business_name}' already in database. Skipping.")
             duplicate_leads_count += 1
@@ -84,7 +87,7 @@ def run_prospecting_for_client(supabase_client, client):
         review_text = get_business_reviews(lead_data.get('place_id'))
         analysis = analyze_opportunity_with_keywords(business_name, review_text)
         
-        # Only save leads with a score above threshold (don't waste time on low-quality)
+        # Only save leads with a score above threshold
         if analysis.get('opportunity_score', 0) >= 3:
             save_lead(supabase_client, client_id, lead_data, analysis)
             new_leads_count += 1
@@ -125,7 +128,7 @@ def run_master_orchestrator():
         for idx, client in enumerate(active_clients, 1):
             log(f"Processing client {idx}/{len(active_clients)}...")
             run_prospecting_for_client(supabase_client, client)
-            log("")  # Blank line for readability
+            log("")
         
         log("="*60)
         log("MASTER ORCHESTRATOR: All jobs complete. Shutting down.")
