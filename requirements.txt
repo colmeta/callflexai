@@ -1,19 +1,28 @@
-# --- requirements.txt (FREE STACK VERSION) ---
+# --- requirements.txt (COMPLETE - Both Systems) ---
 
 # Database
 supabase==2.3.0
 
-# HTTP requests (for Brevo API and ScraperAPI)
+# HTTP requests (for APIs and web scraping)
 requests==2.31.0
 
 # Environment variables
 python-dotenv==1.0.0
 
-# Web scraping (if you need to parse HTML from ScraperAPI)
+# Web scraping (for Craigslist and HTML parsing)
 beautifulsoup4==4.12.2
 
-# Webhook server (only needed for webhook_server.py)
+# SerpAPI (for Google search - service business prospecting)
+google-search-results==2.4.2
+
+# Optional: Webhook server (only needed for webhook_server.py in separate repo)
 flask==3.0.0
 
 # Optional: Better logging
 colorama==0.4.6
+
+# NEW: For PDF generation (when you're ready to auto-generate one-pagers)
+# reportlab==4.0.7  # Uncomment later
+
+# NEW: For Stripe payment processing (when you're ready to accept payments)
+# stripe==7.0.0  # Uncomment later
