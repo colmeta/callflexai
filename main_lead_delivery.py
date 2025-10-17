@@ -1,9 +1,13 @@
-# --- main_lead_delivery.py ---
-# This sends your clients their daily hot leads via email.
+# --- main_lead_delivery.py (FIXED IMPORTS) ---
 
 from datetime import datetime
+import sys
+
+# FIXED: Add modules path BEFORE importing
+sys.path.append('./modules/service_business')
+
 from database import get_supabase_client
-from sender import send_email
+from modules.service_business.sender import send_email
 
 def log(message):
     print(f"[{datetime.utcnow().isoformat()}] {message}")
