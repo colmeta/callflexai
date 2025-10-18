@@ -290,4 +290,4 @@ def log_scraper_run(scraper_type, cities, leads_found, leads_saved, errors=None)
 # At the end of run_reddit_scraper(), add:
 if __name__ == "__main__":
     # ... existing code ...
-    log_scraper_run('reddit', USA_CITIES[:10], len(all_leads), saved_count)
+    # Logging removed for now - will add back later
