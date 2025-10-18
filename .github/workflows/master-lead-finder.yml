@@ -1,0 +1,96 @@
+# --- .github/workflows/master-lead-finder.yml ---
+name: Master Lead Finder (ALL Sources)
+
+on:
+  workflow_dispatch:  # Manual trigger for testing
+
+  # Runs 4x per day to catch fresh leads
+  schedule:
+    - cron: '0 2,8,14,20 * * *'  # 9 PM, 3 AM, 9 AM, 3 PM EST
+
+jobs:
+  find-all-leads:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      # STEP 1: Avvo (BEST source - 20-30 leads)
+      - name: 🎯 Run Avvo Scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "Starting Avvo scraper..."
+          python modules/legal_pi/avvo_scraper.py
+      
+      - name: Wait 2 minutes
+        run: sleep 120
+      
+      # STEP 2: Justia (SECOND BEST - 15-20 leads)
+      - name: 🎯 Run Justia Scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "Starting Justia scraper..."
+          python modules/legal_pi/justia_scraper.py
+      
+      - name: Wait 2 minutes
+        run: sleep 120
+      
+      # STEP 3: Reddit (GOOD - 10-15 leads)
+      - name: 🎯 Run Reddit Scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "Starting Reddit scraper..."
+          python modules/legal_pi/reddit_injury_scraper.py
+      
+      - name: Wait 2 minutes
+        run: sleep 120
+      
+      # STEP 4: Craigslist (OKAY - 5-10 leads)
+      - name: 🎯 Run Craigslist Scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "Starting Craigslist scraper..."
+          python modules/legal_pi/craigslist_scraper.py
+      
+      # Save all CSV files for manual review
+      - name: 📊 Upload CSV Files
+        uses: actions/upload-artifact@v4
+        with:
+          name: all-injury-leads
+          path: |
+            avvo_injured_leads.csv
+            justia_injured_leads.csv
+            reddit_injured_leads.csv
+            craigslist_injured_leads.csv
+          retention-days: 7
+      
+      # Show summary
+      - name: ✅ Summary
+        run: |
+          echo "================================"
+          echo "MASTER LEAD FINDER: COMPLETE"
+          echo "================================"
+          echo "Expected results:"
+          echo "- Avvo: 20-30 leads"
+          echo "- Justia: 15-20 leads"
+          echo "- Reddit: 10-15 leads"
+          echo "- Craigslist: 5-10 leads"
+          echo "TOTAL: 50-75 NEW LEADS!"
+          echo "================================"
