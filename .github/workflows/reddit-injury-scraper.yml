@@ -5,8 +5,8 @@ on:
   workflow_dispatch:  # Manual trigger for testing
 
   # Runs every 6 hours (4 times per day)
-  schedule:
-    - cron: '0 */6 * * *'  # Every 6 hours: 12 AM, 6 AM, 12 PM, 6 PM UTC
+ schedule:
+  - cron: '0 14,17,20,23 * * *'  # ✅ RIGHT - Runs at 9 AM, 12 PM, 3 PM, 6 PM USA East Coast
 
 jobs:
   scrape-injured-people:
