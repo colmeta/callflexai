@@ -1,0 +1,50 @@
+# --- .github/workflows/avvo-justia-master.yml ---
+name: Master Lead Finder (Avvo + Justia)
+
+on:
+  workflow_dispatch:  # Manual trigger for testing
+  
+  # Runs 3x per day (morning, afternoon, evening USA time)
+  schedule:
+    - cron: '0 13 * * *'   # 8 AM EST
+    - cron: '0 18 * * *'   # 1 PM EST
+    - cron: '0 1 * * *'    # 8 PM EST
+
+jobs:
+  find-injury-leads:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: 🎯 Run Master Scraper (Avvo + Justia)
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "🚀 Starting Avvo + Justia scraper..."
+          python master_injury_scraper.py
+      
+      - name: 📊 Upload CSV Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: injury-leads
+          path: injury_leads_master.csv
+          retention-days: 7
+      
+      - name: ✅ Summary
+        run: |
+          echo "================================"
+          echo "MASTER SCRAPER: COMPLETE"
+          echo "Expected: 30-50 leads"
+          echo "Check Supabase database!"
+          echo "================================"
