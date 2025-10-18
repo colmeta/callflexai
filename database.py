@@ -1,4 +1,4 @@
-# --- database.py (FIXED - NO PROXY!) ---
+# --- database.py (FINAL FIX - NO PROXY!) ---
 import os
 from supabase import create_client, Client
 from dotenv import load_dotenv
@@ -12,7 +12,7 @@ supabase: Client = None
 
 try:
     if SUPABASE_URL and SUPABASE_SERVICE_KEY:
-        # CRITICAL: Remove ANY proxy arguments!
+        # CRITICAL: Create client with NO additional arguments
         supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
         print("✅ Database connected!")
     else:
@@ -21,4 +21,5 @@ except Exception as e:
     print(f"❌ Database error: {e}")
 
 def get_supabase_client():
+    """Returns the initialized Supabase client."""
     return supabase
