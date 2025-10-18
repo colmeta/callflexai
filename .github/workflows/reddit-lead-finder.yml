@@ -1,0 +1,35 @@
+name: Reddit Lead Finder
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 2,8,14,20 * * *'
+
+jobs:
+  find-reddit-leads:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Run Reddit Scraper
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python modules/legal_pi/reddit_injury_scraper.py
+      
+      - name: Upload CSV
+        uses: actions/upload-artifact@v4
+        with:
+          name: reddit-leads
+          path: reddit_injured_leads.csv
+          retention-days: 7
