@@ -1,54 +1,45 @@
-# --- modules/legal_pi/reddit_injury_scraper.py ---
-# Automatically finds injured people seeking PI lawyers on Reddit
-# Runs every 6 hours via GitHub Actions
-
+# --- modules/legal_pi/reddit_injury_scraper.py (FIXED & COMPLETE) ---
 import requests
 import csv
 from datetime import datetime, timedelta
 import sys
 import os
 
-# Add parent directory to path for imports
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
 from database import get_supabase_client
 
 def log(message):
     print(f"[{datetime.utcnow().isoformat()}] {message}")
 
-# Top 20 USA cities to monitor
-USA_CITIES = [
-    'LosAngeles', 'Miami', 'Houston', 'Chicago', 'Phoenix',
-    'Philadelphia', 'SanAntonio', 'SanDiego', 'Dallas', 'Austin',
-    'Jacksonville', 'FortWorth', 'Columbus', 'Charlotte', 'SanFrancisco',
-    'Indianapolis', 'Seattle', 'Denver', 'Boston', 'Portland'
+# LEGAL ADVICE SUBREDDITS (Better than city subreddits!)
+LEGAL_SUBREDDITS = [
+    'legaladvice',
+    'personalinjury', 
+    'AskLawyers',
+    'Insurance'
 ]
 
-# Keywords that indicate someone needs a PI lawyer
+# Also search some high-traffic city subreddits
+TOP_CITY_SUBREDDITS = [
+    'LosAngeles', 'Miami', 'Houston', 'Chicago', 'Phoenix'
+]
+
+# Injury keywords
 INJURY_KEYWORDS = [
     'car accident', 'hit by car', 'rear ended', 'motorcycle accident',
-    'truck accident', 'slip and fall', 'injured at work', 'workplace injury',
-    'need a lawyer', 'should i get a lawyer', 'personal injury attorney',
-    'hurt in accident', 'medical bills', 'insurance wont pay', 'totaled my car',
-    'other driver', 'not my fault', 'hit and run', 'whiplash'
+    'truck accident', 'slip and fall', 'injured at work',
+    'need a lawyer', 'should i get a lawyer', 'medical bills',
+    'insurance wont pay', 'other driver', 'not my fault'
 ]
 
-def search_reddit_for_injured_people(city_subreddit, days_back=7):
-    """
-    Searches a city's subreddit for people asking about injury/accident lawyers.
+def search_subreddit(subreddit_name, days_back=7):
+    """Searches one subreddit for injury posts."""
+    log(f"Searching r/{subreddit_name}...")
     
-    Args:
-        city_subreddit (str): e.g., "LosAngeles"
-        days_back (int): How many days back to search
-    
-    Returns:
-        list: Found posts with injured people
-    """
-    log(f"Reddit Scraper: Searching r/{city_subreddit}...")
-    
-    url = f"https://www.reddit.com/r/{city_subreddit}/search.json"
+    url = f"https://www.reddit.com/r/{subreddit_name}/search.json"
     all_leads = []
     
-    for keyword in INJURY_KEYWORDS:
+    for keyword in INJURY_KEYWORDS[:8]:  # Use top 8 keywords
         params = {
             'q': keyword,
             'sort': 'new',
@@ -57,9 +48,7 @@ def search_reddit_for_injured_people(city_subreddit, days_back=7):
             'restrict_sr': 'on'
         }
         
-        headers = {
-            'User-Agent': 'PILeadFinder/1.0'
-        }
+        headers = {'User-Agent': 'PILeadFinder/1.0'}
         
         try:
             response = requests.get(url, params=params, headers=headers, timeout=10)
@@ -71,43 +60,37 @@ def search_reddit_for_injured_people(city_subreddit, days_back=7):
                 for post in posts:
                     post_data = post['data']
                     
-                    # Filter: Must be asking for help
-                    title_lower = post_data['title'].lower()
-                    body_lower = post_data.get('selftext', '').lower()
+                    title = post_data['title'].lower()
+                    body = post_data.get('selftext', '').lower()
                     
-                    # Skip news articles
-                    skip_keywords = ['news', 'article', 'video', 'just saw', 'did anyone']
-                    if any(skip in title_lower for skip in skip_keywords):
+                    # Must be asking for help
+                    if not any(word in title or word in body for word in ['i was', 'my', 'need', 'should i']):
                         continue
                     
-                    # Must contain help-seeking words
-                    help_keywords = ['i was', 'my', 'need', 'looking for', 'should i', 'what do i']
-                    if not any(help in title_lower or help in body_lower for help in help_keywords):
-                        continue
-                    
-                    # Check if recent
+                    # Check recency
                     post_time = datetime.fromtimestamp(post_data['created_utc'])
                     if datetime.now() - post_time > timedelta(days=days_back):
                         continue
                     
                     # Determine injury type
                     injury_type = 'Unknown'
-                    if 'car' in title_lower or 'car' in body_lower:
+                    if 'car' in title or 'car' in body:
                         injury_type = 'Car Accident'
-                    elif 'motorcycle' in title_lower or 'bike' in body_lower:
+                    elif 'motorcycle' in title or 'bike' in body:
                         injury_type = 'Motorcycle Accident'
-                    elif 'slip' in title_lower or 'fall' in title_lower:
+                    elif 'slip' in title or 'fall' in title:
                         injury_type = 'Slip and Fall'
-                    elif 'work' in title_lower or 'job' in body_lower:
+                    elif 'work' in title or 'job' in body:
                         injury_type = 'Workplace Injury'
-                    elif 'truck' in title_lower or 'semi' in body_lower:
-                        injury_type = 'Truck Accident'
+                    
+                    # Extract city from post if available
+                    city = extract_city_from_text(title + ' ' + body) or subreddit_name
                     
                     lead = {
                         'name': f"u/{post_data['author']}",
-                        'city': city_subreddit,
+                        'city': city,
                         'injury_type': injury_type,
-                        'injury_date': 'Recent (within 7 days)',
+                        'injury_date': 'Recent',
                         'description': post_data['title'],
                         'details': post_data['selftext'][:300],
                         'source': 'Reddit',
@@ -117,95 +100,91 @@ def search_reddit_for_injured_people(city_subreddit, days_back=7):
                     }
                     
                     all_leads.append(lead)
-                
-                log(f"  Found {len(posts)} posts for keyword '{keyword}'")
         
         except Exception as e:
-            log(f"  ERROR searching for '{keyword}': {e}")
+            log(f"  Error with '{keyword}': {e}")
             continue
     
     # Remove duplicates
-    unique_leads = []
-    seen_urls = set()
+    unique = []
+    seen = set()
     for lead in all_leads:
-        if lead['source_url'] not in seen_urls:
-            unique_leads.append(lead)
-            seen_urls.add(lead['source_url'])
+        if lead['source_url'] not in seen:
+            unique.append(lead)
+            seen.add(lead['source_url'])
     
-    log(f"Reddit Scraper: Found {len(unique_leads)} unique leads in r/{city_subreddit}")
-    return unique_leads
+    log(f"  Found {len(unique)} unique leads in r/{subreddit_name}")
+    return unique
+
+def extract_city_from_text(text):
+    """Tries to extract city name from post text."""
+    cities = [
+        'Los Angeles', 'LA', 'Miami', 'Houston', 'Chicago', 'Phoenix',
+        'Dallas', 'Austin', 'Seattle', 'Denver', 'Atlanta', 'San Diego'
+    ]
+    
+    for city in cities:
+        if city.lower() in text.lower():
+            if city == 'LA':
+                return 'Los Angeles'
+            return city
+    return None
 
 def calculate_quality_score(post_data):
-    """Scores a Reddit post from 1-10 based on PI lead quality."""
+    """Scores from 1-10."""
     score = 5
-    
     title = post_data['title'].lower()
     body = post_data.get('selftext', '').lower()
     text = title + ' ' + body
     
-    # Positive indicators
+    # Positive
     if 'doctor' in text or 'hospital' in text or 'er' in text:
         score += 2
-    
-    if 'police report' in text or 'cop' in text:
+    if 'police' in text:
         score += 1
-    
-    if any(word in text for word in ['hurt', 'injured', 'pain', 'broken']):
+    if any(w in text for w in ['hurt', 'injured', 'pain']):
         score += 1
-    
-    if any(word in text for word in ['other driver', 'not my fault', 'they hit me']):
+    if any(w in text for w in ['other driver', 'not my fault']):
         score += 1
-    
-    if 'need a lawyer' in text or 'should i get' in text:
+    if 'need a lawyer' in text:
         score += 2
     
-    # Negative indicators
+    # Negative
     if 'already have' in text or 'my lawyer' in text:
         score -= 5
-    
-    if any(word in text for word in ['years ago', 'long time', 'old']):
+    if 'years ago' in text:
         score -= 2
-    
-    if 'my fault' in text or 'i caused' in text:
-        score -= 3
     
     return max(1, min(10, score))
 
-def save_leads_to_csv(leads, filename='reddit_injured_leads.csv'):
-    """Saves leads to CSV for manual review."""
+def save_to_csv(leads, filename='reddit_injured_leads.csv'):
+    """Saves to CSV."""
     if not leads:
         log("No leads to save.")
         return
     
     log(f"Saving {len(leads)} leads to {filename}...")
-    
     with open(filename, 'w', newline='', encoding='utf-8') as f:
         writer = csv.DictWriter(f, fieldnames=leads[0].keys())
         writer.writeheader()
         writer.writerows(leads)
-    
     log(f"✅ Saved to {filename}")
 
-def save_leads_to_database(leads):
-    """Saves leads to Supabase."""
+def save_to_database(leads):
+    """Saves to Supabase."""
     supabase = get_supabase_client()
     if not supabase:
-        log("ERROR: Cannot connect to database. Saving to CSV only.")
+        log("ERROR: Cannot connect to database.")
         return
     
-    saved_count = 0
-    
+    saved = 0
     for lead in leads:
         try:
-            # Check for duplicates
             existing = supabase.table('injured_people_leads').select('id').eq('source_url', lead['source_url']).execute()
-            
             if existing.data:
-                log(f"  Duplicate: {lead['name']}")
                 continue
             
-            # Save new lead
-            lead_data = {
+            supabase.table('injured_people_leads').insert({
                 'prospect_name': lead['name'],
                 'city': lead['city'],
                 'injury_type': lead['injury_type'],
@@ -216,55 +195,54 @@ def save_leads_to_database(leads):
                 'source_url': lead['source_url'],
                 'posted_date': lead['posted_date'],
                 'quality_score': lead['quality_score'],
-                'status': 'new',
-                'matched_to_firm': None
-            }
+                'status': 'new'
+            }).execute()
             
-            supabase.table('injured_people_leads').insert(lead_data).execute()
-            saved_count += 1
+            saved += 1
             log(f"  ✅ Saved: {lead['name']} (score: {lead['quality_score']})")
-        
         except Exception as e:
-            log(f"  ❌ Error saving {lead['name']}: {e}")
+            log(f"  ❌ Error: {e}")
     
-    log(f"Database: Saved {saved_count} new leads")
+    log(f"Database: Saved {saved} new leads")
 
 def run_reddit_scraper():
-    """Main function: Scrapes all USA city subreddits."""
-    log("="*60)
-    log("REDDIT AUTO SCRAPER: Starting...")
-    log("="*60)
+    """Main function."""
+    log("="*70)
+    log("REDDIT SCRAPER: Starting...")
+    log("="*70)
     
     all_leads = []
     
-    # Scrape top 10 cities (increase this once you validate it works)
-    for city in USA_CITIES[:10]:
-        leads = search_reddit_for_injured_people(city, days_back=7)
+    # Search legal advice subreddits (BEST SOURCE!)
+    for subreddit in LEGAL_SUBREDDITS:
+        leads = search_subreddit(subreddit, days_back=7)
         all_leads.extend(leads)
-        
-        # Be respectful: 2-second delay between cities
         import time
-        time.sleep(2)
+        time.sleep(3)
     
-    log(f"\nTotal leads found: {len(all_leads)}")
+    # Also search top city subreddits
+    for subreddit in TOP_CITY_SUBREDDITS[:3]:
+        leads = search_subreddit(subreddit, days_back=7)
+        all_leads.extend(leads)
+        import time
+        time.sleep(3)
+    
+    log(f"\nTotal: {len(all_leads)} leads")
     
     if all_leads:
-        # Save to CSV for your review
-        save_leads_to_csv(all_leads)
+        save_to_csv(all_leads)
+        save_to_database(all_leads)
         
-        # Save to database for automation
-        save_leads_to_database(all_leads)
-        
-        # Print summary
+        # Summary
         from collections import Counter
-        city_counts = Counter(lead['city'] for lead in all_leads)
+        city_counts = Counter(l['city'] for l in all_leads)
         log("\nLeads by city:")
         for city, count in city_counts.most_common():
-            log(f"  {city}: {count} leads")
+            log(f"  {city}: {count}")
     
-    log("="*60)
-    log("REDDIT AUTO SCRAPER: Complete")
-    log("="*60)
+    log("="*70)
+    log("REDDIT SCRAPER: Complete")
+    log("="*70)
 
 if __name__ == "__main__":
     run_reddit_scraper()
