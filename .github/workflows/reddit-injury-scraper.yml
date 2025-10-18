@@ -1,3 +1,7 @@
+# PI Lawyer Lead Finder - Runs every 6 hours
+# Updated: 2025-10-18
+
+name: Reddit & Craigslist Injury Scraper
 # --- .github/workflows/reddit-injury-scraper.yml ---
 name: Reddit & Craigslist Injury Scraper
 
