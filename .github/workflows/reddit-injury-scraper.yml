@@ -1,26 +1,20 @@
-# PI Lawyer Lead Finder - Runs every 6 hours
-# Updated: 2025-10-18
-
-name: Reddit & Craigslist Injury Scraper
-# --- .github/workflows/reddit-injury-scraper.yml ---
-name: Reddit & Craigslist Injury Scraper
+name: PI Lawyer Lead Finder
 
 on:
-  workflow_dispatch:  # Manual trigger for testing
+  workflow_dispatch:
 
-  # Runs every 6 hours (4 times per day)
- schedule:
-  - cron: '0 14,17,20,23 * * *'  # ✅ RIGHT - Runs at 9 AM, 12 PM, 3 PM, 6 PM USA East Coast
+  schedule:
+    - cron: '0 2,8,14,20 * * *'
 
 jobs:
-  scrape-injured-people:
+  find-injured-people:
     runs-on: ubuntu-latest
     
     steps:
-      - name: Check out repository
+      - name: Checkout code
         uses: actions/checkout@v4
       
-      - name: Set up Python
+      - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: '3.11'
@@ -34,7 +28,7 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python modules/legal_pi/reddit_injury_scraper.py
       
-      - name: Wait 2 minutes (be respectful to servers)
+      - name: Wait between scrapers
         run: sleep 120
       
       - name: Run Craigslist Scraper
@@ -43,10 +37,10 @@ jobs:
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: python modules/legal_pi/craigslist_scraper.py
       
-      - name: Upload CSV artifacts (for manual review)
+      - name: Save CSV files
         uses: actions/upload-artifact@v4
         with:
-          name: injury-leads-csv
+          name: injured-people-leads
           path: |
             reddit_injured_leads.csv
             craigslist_injured_leads.csv
