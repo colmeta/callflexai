@@ -266,28 +266,5 @@ def run_reddit_scraper():
     log("REDDIT AUTO SCRAPER: Complete")
     log("="*60)
 
-def log_scraper_run(scraper_type, cities, leads_found, leads_saved, errors=None):
-    """Logs scraper run to database for monitoring."""
-    supabase = get_supabase_client()
-    if not supabase:
-        return
-    
-    try:
-        log_data = {
-            'scraper_type': scraper_type,
-            'cities_scraped': cities,
-            'leads_found': leads_found,
-            'leads_saved': leads_saved,
-            'duplicates_skipped': leads_found - leads_saved,
-            'errors': errors,
-            'status': 'success' if not errors else 'partial'
-        }
-        supabase.table('scraper_logs').insert(log_data).execute()
-        log("✅ Logged scraper run to database")
-    except Exception as e:
-        log(f"❌ Failed to log scraper run: {e}")
-
-# At the end of run_reddit_scraper(), add:
 if __name__ == "__main__":
-    # ... existing code ...
-    # Logging removed for now - will add back later
+    run_reddit_scraper()
