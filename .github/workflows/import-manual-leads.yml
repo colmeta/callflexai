@@ -1,0 +1,29 @@
+name: Import Manual Leads
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - 'daily_leads.csv'
+
+jobs:
+  import-leads:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: Import Leads
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: python manual_lead_importer.py daily_leads.csv
