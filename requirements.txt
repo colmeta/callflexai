@@ -10,7 +10,7 @@ requests==2.31.0
 python-dotenv==1.0.0
 
 # Web scraping
-beautifulsoup4==4.12.2
+beautifulsoup4==4.12.3
 
 # SerpAPI (for Google search - service business prospecting)
 google-search-results==2.4.2
