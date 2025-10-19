@@ -1,0 +1,112 @@
+# --- .github/workflows/mega-ai-agent.yml ---
+name: MEGA AI Agent (All 70+ Platforms)
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform_filter:
+        description: 'Run specific platform only (leave empty for all)'
+        required: false
+        default: ''
+  
+  # Run 4x per day (maximize lead collection)
+  schedule:
+    - cron: '0 6 * * *'   # 6 AM UTC = 1 AM EST
+    - cron: '0 12 * * *'  # 12 PM UTC = 7 AM EST
+    - cron: '0 18 * * *'  # 6 PM UTC = 1 PM EST
+    - cron: '0 0 * * *'   # 12 AM UTC = 7 PM EST
+
+jobs:
+  mega-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180  # 3 hours max
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+      
+      - name: 🐍 Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+      
+      - name: 📦 Install Dependencies
+        run: |
+          pip install -r requirements.txt
+          playwright install chromium
+          playwright install-deps
+      
+      - name: 🔐 Setup Credentials (Optional)
+        run: |
+          echo "Setting up browser profiles..."
+          # Create .env for local config
+          touch .env
+          echo "BROWSER_USE_LOGIN=${{ secrets.ENABLE_LOGIN }}" >> .env
+          echo "FACEBOOK_EMAIL=${{ secrets.FACEBOOK_EMAIL }}" >> .env
+          echo "FACEBOOK_PASSWORD=${{ secrets.FACEBOOK_PASSWORD }}" >> .env
+      
+      - name: 🤖 Run MEGA AI Agent
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          USE_PROXY: ${{ secrets.USE_PROXY }}
+          PROXY_URL: ${{ secrets.PROXY_URL }}
+          CAPTCHA_API_KEY: ${{ secrets.CAPTCHA_API_KEY }}
+          PLATFORM_FILTER: ${{ github.event.inputs.platform_filter }}
+        run: |
+          echo "🚀 Starting MEGA AI Agent..."
+          echo "Expected: 200-300 leads per run"
+          echo "Cost: ~$2-5 per run"
+          python mega_lead_agent.py
+      
+      - name: 📊 Upload Results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: mega-leads-${{ github.run_number }}
+          path: |
+            mega_leads.csv
+            agent_metrics.json
+            mega_agent.log
+          retention-days: 30
+      
+      - name: 📈 Generate Report
+        if: always()
+        run: |
+          echo "================================"
+          echo "MEGA AI AGENT REPORT"
+          echo "================================"
+          
+          if [ -f mega_leads.csv ]; then
+            LEAD_COUNT=$(wc -l < mega_leads.csv)
+            echo "✅ Leads collected: $((LEAD_COUNT - 1))"
+          else
+            echo "⚠️ No leads collected"
+          fi
+          
+          if [ -f agent_metrics.json ]; then
+            echo ""
+            echo "📊 Metrics:"
+            cat agent_metrics.json | python -m json.tool
+          fi
+          
+          echo ""
+          echo "================================"
+      
+      - name: 💬 Notify on Failure
+        if: failure()
+        run: |
+          echo "❌ MEGA Agent failed!"
+          echo "Check logs for details"
+          
+          # Optional: Send notification to Discord/Slack
+          # curl -X POST ${{ secrets.DISCORD_WEBHOOK }} -d "..."
+      
+      - name: ✅ Success Summary
+        if: success()
+        run: |
+          echo "🎉 MEGA AI Agent completed successfully!"
+          echo "Check Supabase for new leads"
+          echo "CSV artifact uploaded for review"
