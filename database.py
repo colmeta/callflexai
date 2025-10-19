@@ -1,25 +1,23 @@
-# --- database.py (FINAL FIX - NO PROXY!) ---
+# --- database.py (FINAL - NO PROXY) ---
 import os
-from supabase import create_client, Client
+from supabase import create_client
 from dotenv import load_dotenv
 
 load_dotenv()
 
-SUPABASE_URL = os.getenv('SUPABASE_URL')
-SUPABASE_SERVICE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
-
-supabase: Client = None
-
-try:
-    if SUPABASE_URL and SUPABASE_SERVICE_KEY:
-        # CRITICAL: Create client with NO additional arguments
-        supabase = create_client(SUPABASE_URL, SUPABASE_SERVICE_KEY)
-        print("✅ Database connected!")
-    else:
-        print("❌ Missing SUPABASE_URL or SUPABASE_SERVICE_KEY")
-except Exception as e:
-    print(f"❌ Database error: {e}")
-
 def get_supabase_client():
-    """Returns the initialized Supabase client."""
-    return supabase
+    """Returns initialized Supabase client (no proxy)."""
+    SUPABASE_URL = os.getenv('SUPABASE_URL')
+    SUPABASE_KEY = os.getenv('SUPABASE_SERVICE_KEY')
+    
+    if not SUPABASE_URL or not SUPABASE_KEY:
+        print("❌ Missing Supabase credentials")
+        return None
+    
+    try:
+        client = create_client(SUPABASE_URL, SUPABASE_KEY)
+        print("✅ Database connected!")
+        return client
+    except Exception as e:
+        print(f"❌ Database error: {e}")
+        return None
