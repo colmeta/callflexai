@@ -26,13 +26,13 @@ jobs:
       - name: Install dependencies
         run: pip install -r requirements.txt
       
-      - name: 🎯 Run Master Scraper (Avvo + Justia)
+      - name: 🎯 Run Reddit API Scraper
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
         run: |
-          echo "🚀 Starting Avvo + Justia scraper..."
-          python master_injury_scraper.py
+          echo "🚀 Starting Reddit API scraper..."
+          python reddit_api_scraper.py
       
       - name: 📊 Upload CSV Results
         uses: actions/upload-artifact@v4
