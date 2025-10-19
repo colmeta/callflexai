@@ -2,9 +2,6 @@ name: Import Manual Leads
 
 on:
   workflow_dispatch:
-  push:
-    paths:
-      - 'daily_leads.csv'
 
 jobs:
   import-leads:
@@ -26,4 +23,4 @@ jobs:
         env:
           SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
           SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
-        run: python manual_lead_importer.py daily_leads.csv
+        run: python manual_lead_importer.py leads_template.csv
