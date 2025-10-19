@@ -282,6 +282,111 @@ def save_to_database(leads: List[Dict]):
         return
     
     saved = 0
+    duplicates = 0
+    
     for lead in leads:
         try:
-            existing = supabase.
+            existing = supabase.table('injured_people_leads').select('id').eq('source_url', lead['url']).execute()
+            
+            if existing.data:
+                duplicates += 1
+                continue
+            
+            supabase.table('injured_people_leads').insert({
+                'prospect_name': lead.get('username', 'Anonymous'),
+                'city': lead['city'],
+                'injury_type': lead['injury_type'],
+                'injury_date': 'Recent',
+                'description': lead['description'],
+                'source': lead['source'],
+                'source_url': lead['url'],
+                'posted_date': lead['posted_date'],
+                'quality_score': lead['score'],
+                'status': 'new'
+            }).execute()
+            
+            saved += 1
+            
+        except Exception as e:
+            log(f"  ❌ Error: {e}")
+    
+    log(f"\n💾 DATABASE: Saved {saved}, Duplicates {duplicates}")
+
+# ============================================================================
+# MASTER ORCHESTRATOR
+# ============================================================================
+
+async def run_mega_collector():
+    """Master orchestrator with Gemini."""
+    log("="*70)
+    log("🚀 MEGA COLLECTOR (GEMINI FREE + FACEBOOK): Starting...")
+    log("="*70)
+    
+    all_leads = []
+    task_count = 0
+    total_tasks = sum(len(tasks) for tasks in PLATFORM_TASKS.values())
+    
+    for platform, tasks in PLATFORM_TASKS.items():
+        log(f"\n{'🎯'*35}")
+        log(f"PLATFORM: {platform.upper()}")
+        log(f"{'🎯'*35}")
+        
+        for task_config in tasks:
+            task_count += 1
+            log(f"\n[Task {task_count}/{total_tasks}]")
+            
+            leads = await run_agent_task(platform, task_config)
+            all_leads.extend(leads)
+            
+            if task_count < total_tasks:
+                delay = random.randint(*DELAYS['between_tasks'])
+                log(f"⏳ Waiting {delay}s...")
+                await asyncio.sleep(delay)
+        
+        delay = random.randint(*DELAYS['between_platforms'])
+        log(f"\n⏳ Platform complete. Waiting {delay}s...")
+        await asyncio.sleep(delay)
+    
+    # Remove duplicates
+    unique_leads = []
+    seen_urls = set()
+    for lead in all_leads:
+        if lead['url'] not in seen_urls:
+            unique_leads.append(lead)
+            seen_urls.add(lead['url'])
+    
+    log("\n" + "="*70)
+    log(f"📊 GEMINI RESULTS: {len(unique_leads)} unique leads")
+    log("="*70)
+    
+    if unique_leads:
+        save_to_csv(unique_leads)
+        save_to_database(unique_leads)
+        print_analytics(unique_leads)
+    
+    log("\n✅ COMPLETE (100% FREE)")
+
+def print_analytics(leads: List[Dict]):
+    """Prints analytics."""
+    by_source = {}
+    for lead in leads:
+        by_source[lead['source']] = by_source.get(lead['source'], 0) + 1
+    
+    log("\n📊 LEADS BY SOURCE:")
+    for source, count in sorted(by_source.items(), key=lambda x: x[1], reverse=True):
+        log(f"  {source}: {count}")
+    
+    high = sum(1 for l in leads if l['score'] >= 8)
+    medium = sum(1 for l in leads if 6 <= l['score'] < 8)
+    
+    log(f"\n📊 QUALITY:")
+    log(f"  High (8-10): {high}")
+    log(f"  Medium (6-7): {medium}")
+
+if __name__ == "__main__":
+    if not os.getenv("GEMINI_API_KEY"):
+        log("❌ ERROR: GEMINI_API_KEY not found")
+        log("Get free key at: https://aistudio.google.com/app/apikey")
+        exit(1)
+    
+    asyncio.run(run_mega_collector())
