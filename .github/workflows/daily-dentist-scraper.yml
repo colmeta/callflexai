@@ -1,0 +1,68 @@
+name: Daily Dentist Scraper & Email Sender
+
+on:
+  workflow_dispatch:  # Manual trigger
+  
+  # Runs every day at 9 AM UTC (adjust for your timezone)
+  schedule:
+    - cron: '0 9 * * *'
+
+jobs:
+  scrape-and-email:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      
+      - name: 🦷 Scrape 100+ Dentists
+        env:
+          SERPAPI_API_KEY: ${{ secrets.SERPAPI_API_KEY }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "🔍 Scraping dentists across America..."
+          python dentist_scraper.py 100
+      
+      - name: 📧 Generate Personalized Emails
+        env:
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "✍️ Generating personalized emails..."
+          python email_generator.py
+      
+      - name: 📤 Send Emails (Max 50/day)
+        env:
+          BREVO_API_KEY: ${{ secrets.BREVO_API_KEY }}
+          FROM_EMAIL: ${{ secrets.FROM_EMAIL }}
+          FROM_NAME: ${{ secrets.FROM_NAME }}
+          SUPABASE_URL: ${{ secrets.SUPABASE_URL }}
+          SUPABASE_SERVICE_KEY: ${{ secrets.SUPABASE_SERVICE_KEY }}
+        run: |
+          echo "📤 Sending emails to dentists..."
+          python send_emails.py --live 50
+      
+      - name: 📊 Upload Results
+        uses: actions/upload-artifact@v4
+        with:
+          name: dentist-scraping-results
+          path: dentists_scraped.csv
+          retention-days: 30
+      
+      - name: ✅ Summary
+        run: |
+          echo "================================"
+          echo "DAILY DENTIST OPERATION: COMPLETE"
+          echo "Expected: 100 dentists scraped"
+          echo "Expected: 50 emails sent"
+          echo "Check Supabase for results!"
+          echo "================================"
