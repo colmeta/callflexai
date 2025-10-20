@@ -33,4 +33,3 @@ playwright==1.40.0
 anthropic==0.8.0
 google-generativeai==0.3.0
 
-
