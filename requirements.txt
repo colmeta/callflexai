@@ -7,7 +7,7 @@ supabase==2.3.0
 requests==2.31.0
 
 # Environment variables
-python-dotenv==1.0.0
+python-dotenv==1.0.1
 
 # Web scraping
 beautifulsoup4==4.12.3
